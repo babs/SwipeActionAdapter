@@ -1,5 +1,6 @@
 /*
  * Copyright 2014 Wouter Dullaert
+ * Copyright 2015 Damien Degois
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +17,17 @@
 
 package com.wdullaer.swipeactionadapter;
 
+import com.nineoldandroids.view.ViewHelper;
+import com.wdullaer.swipeactionadapter.SwipeActionAdapter.OnGetViewListener;
+
 import android.content.Context;
 import android.support.annotation.NonNull;
 import android.util.AttributeSet;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.BaseAdapter;
 import android.widget.FrameLayout;
 
 /**
@@ -30,165 +36,216 @@ import android.widget.FrameLayout;
  * Created by wdullaer on 22.06.14.
  */
 public class SwipeViewGroup extends FrameLayout {
-    private View contentView = null;
+	private View contentView = null;
 
-    private int visibleView = SwipeDirections.DIRECTION_NEUTRAL;
-    private SparseArray<View> mBackgroundMap = new SparseArray<>();
-    private OnTouchListener swipeTouchListener;
+	private int visibleView = SwipeDirections.DIRECTION_NEUTRAL;
+	private SparseArray<View> mBackgroundMap = new SparseArray<View>();
+	private SparseArray<OnGetViewListener> mListenerMap = new SparseArray<OnGetViewListener>();
+	private OnTouchListener swipeTouchListener;
 
-    /**
-     * Standard android View constructor
-     *
-     * @param context
-     */
-    public SwipeViewGroup(Context context) {
-        super(context);
-        initialize();
-    }
+	/**
+	 * Standard android View constructor
+	 *
+	 * @param context
+	 */
+	public SwipeViewGroup(Context context) {
+		super(context);
+		initialize();
+	}
 
-    /**
-     * Standard android View constructor
-     *
-     * @param context
-     * @param attrs
-     */
-    public SwipeViewGroup(Context context, AttributeSet attrs) {
-        super(context, attrs);
-        initialize();
-    }
+	/**
+	 * Standard android View constructor
+	 *
+	 * @param context
+	 * @param attrs
+	 */
+	public SwipeViewGroup(Context context, AttributeSet attrs) {
+		super(context, attrs);
+		initialize();
+	}
 
-    /**
-     * Standard android View constructor
-     *
-     * @param context
-     * @param attrs
-     * @param defStyle
-     */
-    public SwipeViewGroup(Context context, AttributeSet attrs, int defStyle) {
-        super(context, attrs, defStyle);
-        initialize();
-    }
+	/**
+	 * Standard android View constructor
+	 *
+	 * @param context
+	 * @param attrs
+	 * @param defStyle
+	 */
+	public SwipeViewGroup(Context context, AttributeSet attrs, int defStyle) {
+		super(context, attrs, defStyle);
+		initialize();
+	}
 
-    /**
-     * Common code for all the constructors
-     */
-    private void initialize() {
-        // Allows click events to reach the ListView in case the row has a clickable View like a Button
-        // FIXME: probably messes with accessibility. Doesn't fix root cause (see onTouchEvent)
-        setDescendantFocusability(FOCUS_BLOCK_DESCENDANTS);
-    }
+	/**
+	 * Common code for all the constructors
+	 */
+	private void initialize() {
+		// Allows click events to reach the ListView in case the row has a
+		// clickable View like a Button
+		// FIXME: probably messes with accessibility. Doesn't fix root cause
+		// (see onTouchEvent)
+		setDescendantFocusability(FOCUS_BLOCK_DESCENDANTS);
+	}
 
-    /**
-     * Add a View to the background of the Layout. The background should have the same height
-     * as the contentView
-     *
-     * @param background The View to be added to the Layout
-     * @param direction The key to be used to find it again
-     * @return A reference to the a layout so commands can be chained
-     */
-    public SwipeViewGroup addBackground(View background, int direction){
-        if(mBackgroundMap.get(direction) != null) removeView(mBackgroundMap.get(direction));
+	/**
+	 * Add a View to the background of the Layout. The background should have
+	 * the same height as the contentView
+	 *
+	 * @param background
+	 *            The View to be added to the Layout
+	 * @param direction
+	 *            The key to be used to find it again
+	 * @return A reference to the a layout so commands can be chained
+	 */
+	public SwipeViewGroup addBackground(View background, int direction) {
+		if (mBackgroundMap.get(direction) != null) {
+			removeView(mBackgroundMap.get(direction));
+		}
 
-        background.setVisibility(View.INVISIBLE);
-        mBackgroundMap.put(direction, background);
-        addView(background);
-        return this;
-    }
+		background.setVisibility(View.INVISIBLE);
+		mBackgroundMap.put(direction, background);
+		addView(background);
+		return this;
+	}
 
-    /**
-     * Show the View linked to a key. Don't do anything if the key is not found
-     *
-     * @param direction The key of the View to be shown
-     * @param dimBackground Indicates whether the background should be dimmed
-     */
-    public void showBackground(int direction, boolean dimBackground){
-        if(mBackgroundMap.get(direction) == null) return;
+	public SwipeViewGroup registerOnGetView(
+			OnGetViewListener onGetViewListener, int direction) {
+		mListenerMap.put(direction, onGetViewListener);
+		return this;
+	}
 
-        if(visibleView != SwipeDirections.DIRECTION_NEUTRAL)
-            mBackgroundMap.get(visibleView).setVisibility(View.INVISIBLE);
-        mBackgroundMap.get(direction).setVisibility(View.VISIBLE);
-        mBackgroundMap.get(direction).setAlpha(dimBackground ? 0.4f : 1);
-        visibleView = direction;
-    }
+	public void onGetView(int position, View convertView, ViewGroup parent,
+			BaseAdapter adapter) {
+		for (int i = 0; i < mListenerMap.size(); i++) {
+			OnGetViewListener listener = mListenerMap.valueAt(i);
+			if (listener != null) {
+				int direction = mListenerMap.keyAt(i);
+				listener.onGetView(position, direction,
+						mBackgroundMap.get(direction), this, adapter);
+			}
+		}
+	}
 
-    /**
-     * Add a contentView to the Layout
-     *
-     * @param contentView The View to be added
-     * @return A reference to the layout so commands can be chained
-     */
-    public SwipeViewGroup setContentView(View contentView){
-        if(this.contentView != null) removeView(contentView);
-        addView(contentView);
-        this.contentView = contentView;
+	/**
+	 * Show the View linked to a key. Don't do anything if the key is not found
+	 *
+	 * @param direction
+	 *            The key of the View to be shown
+	 * @param dimBackground
+	 *            Indicates whether the background should be dimmed
+	 */
+	public void showBackground(int direction, boolean dimBackground) {
+		if (mBackgroundMap.get(direction) == null) {
+			return;
+		}
 
-        return this;
-    }
+		if (visibleView != SwipeDirections.DIRECTION_NEUTRAL) {
+			mBackgroundMap.get(visibleView).setVisibility(View.INVISIBLE);
+		}
+		mBackgroundMap.get(direction).setVisibility(View.VISIBLE);
+		ViewHelper.setAlpha(mBackgroundMap.get(direction), dimBackground ? 0.4f
+				: 1);
+		visibleView = direction;
+	}
 
-    /**
-     * Returns the current contentView of the Layout
-     *
-     * @return contentView of the Layout
-     */
-    public View getContentView(){
-        return contentView;
-    }
+	/**
+	 * Add a contentView to the Layout
+	 *
+	 * @param contentView
+	 *            The View to be added
+	 * @return A reference to the layout so commands can be chained
+	 */
+	public SwipeViewGroup setContentView(View contentView) {
+		if (this.contentView != null) {
+			removeView(contentView);
+		}
+		addView(contentView);
+		this.contentView = contentView;
 
-    /**
-     * Move all backgrounds to the edge of the Layout so they can be swiped in
-     */
-    public void translateBackgrounds(){
-        this.setClipChildren(false);
-        for(int i=0;i<mBackgroundMap.size();i++){
-            int key = mBackgroundMap.keyAt(i);
-            View value = mBackgroundMap.valueAt(i);
-            value.setTranslationX(-Integer.signum(key)*value.getWidth());
-        }
-    }
+		return this;
+	}
 
-    /**
-     * Set a touch listener the SwipeViewGroup will watch: once the OnTouchListener is interested in
-     * events, the SwipeViewGroup will stop propagating touch events to its children
-     *
-     * @param swipeTouchListener The OnTouchListener to watch
-     * @return A reference to the layout so commands can be chained
-     */
-    public SwipeViewGroup setSwipeTouchListener(OnTouchListener swipeTouchListener) {
-        this.swipeTouchListener = swipeTouchListener;
-        return this;
-    }
+	/**
+	 * Returns the current contentView of the Layout
+	 *
+	 * @return contentView of the Layout
+	 */
+	public View getContentView() {
+		return contentView;
+	}
 
-    @Override
-    public Object getTag() {
-        if(contentView != null) return contentView.getTag();
-        else return null;
-    }
+	/**
+	 * Move all backgrounds to the edge of the Layout so they can be swiped in
+	 */
+	public void translateBackgrounds() {
+		this.setClipChildren(false);
+		for (int i = 0; i < mBackgroundMap.size(); i++) {
+			int key = mBackgroundMap.keyAt(i);
+			View value = mBackgroundMap.valueAt(i);
+			ViewHelper.setTranslationX(value,
+					-Integer.signum(key) * value.getWidth());
+		}
+	}
 
-    @Override
-    public void setTag(Object tag) {
-        if(contentView != null) contentView.setTag(tag);
-    }
+	/**
+	 * Set a touch listener the SwipeViewGroup will watch: once the
+	 * OnTouchListener is interested in events, the SwipeViewGroup will stop
+	 * propagating touch events to its children
+	 *
+	 * @param swipeTouchListener
+	 *            The OnTouchListener to watch
+	 * @return A reference to the layout so commands can be chained
+	 */
+	public SwipeViewGroup setSwipeTouchListener(
+			OnTouchListener swipeTouchListener) {
+		this.swipeTouchListener = swipeTouchListener;
+		return this;
+	}
 
-    @Override
-    public Object getTag(int key) {
-        if(contentView != null) return contentView.getTag(key);
-        else return null;
-    }
+	@Override
+	public Object getTag() {
+		if (contentView != null) {
+			return contentView.getTag();
+		} else {
+			return null;
+		}
+	}
 
-    @Override
-    public void setTag(int key, Object tag) {
-        if(contentView != null) contentView.setTag(key, tag);
-    }
+	@Override
+	public void setTag(Object tag) {
+		if (contentView != null) {
+			contentView.setTag(tag);
+		}
+	}
 
-    @Override
-    public boolean onInterceptTouchEvent(MotionEvent ev) {
-        // Start tracking the touch when a child is processing it
-        return super.onInterceptTouchEvent(ev) || swipeTouchListener.onTouch(this, ev);
-    }
+	@Override
+	public Object getTag(int key) {
+		if (contentView != null) {
+			return contentView.getTag(key);
+		} else {
+			return null;
+		}
+	}
 
-    @Override
-    public boolean onTouchEvent(@NonNull MotionEvent ev) {
-        // Finish the swipe gesture: our parent will no longer do it if this function is called
-        return swipeTouchListener.onTouch(this, ev);
-    }
+	@Override
+	public void setTag(int key, Object tag) {
+		if (contentView != null) {
+			contentView.setTag(key, tag);
+		}
+	}
+
+	@Override
+	public boolean onInterceptTouchEvent(MotionEvent ev) {
+		// Start tracking the touch when a child is processing it
+		return super.onInterceptTouchEvent(ev)
+				|| swipeTouchListener.onTouch(this, ev);
+	}
+
+	@Override
+	public boolean onTouchEvent(@NonNull MotionEvent ev) {
+		// Finish the swipe gesture: our parent will no longer do it if this
+		// function is called
+		return swipeTouchListener.onTouch(this, ev);
+	}
+
 }
